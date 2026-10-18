@@ -64,6 +64,20 @@
       </section>
 
       <section class="sec">
+        <h3>②′ 摆道具 <span class="hint" id="assetHint">点一下拿起，再点地面放下</span></h3>
+        <div class="body">
+          <div class="grid3" id="assetTabs"></div>
+          <div class="assets" id="assetGrid"></div>
+          <div class="row"><label>转身</label><div class="grid2">
+            <button id="btnRot90" class="ghost">↺ 转 90°</button>
+            <button id="btnCancelPlace" class="ghost">放下 / 取消</button>
+          </div></div>
+          <div class="row"><label>大小</label><input id="assetScale" type="range" min="0.4" max="2.5" step="0.1" value="1"></div>
+          <div class="list" id="placedList"></div>
+        </div>
+      </section>
+
+      <section class="sec">
         <h3>场景大纲 <span class="hint">点选后按 . 聚焦</span></h3>
         <div class="body"><div class="list outline" id="outline"></div></div>
       </section>

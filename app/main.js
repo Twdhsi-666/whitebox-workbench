@@ -5,6 +5,8 @@ import { MOVES, LENSES, RATIOS, aspectOf, fovFromMM, mmFromFov, V } from '../eng
 import { EASE_LIST } from '../engine/easing.js';
 import { ACTION_LIST } from '../engine/figure.js';
 import { runAll } from '../engine/checks.js';
+import { ASSETS, ASSET_GROUPS, instantiate } from '../engine/assets.js';
+import { thumbOf } from './thumbs.js';
 import { buildPack } from './promptpack.js';
 import { renderVideo } from './exporter.js';
 
@@ -17,7 +19,8 @@ const el = {};
  'tlTrack', 'shotList', 'shotCount', 'shotName', 'shotMove', 'shotDur', 'shotEase', 'shotMmSel', 'shotMm', 'fovRead', 'shotSubject',
  'moveParams', 'shotCue', 'btnShotDup', 'btnShotDel', 'btnViewFree', 'btnViewCam', 'selAspect', 'tgGrid', 'tgFru',
  'tgPath', 'tgGuide', 'checkSummary', 'checkList', 'checkTime', 'btnPack', 'packOut', 'btnPackCopy', 'btnPackDl',
- 'saveState', 'jobMask', 'jobTitle', 'jobBar', 'jobLog', 'jobCancel'].forEach(k => { el[k] = document.getElementById(k); });
+ 'saveState', 'jobMask', 'jobTitle', 'jobBar', 'jobLog', 'jobCancel',
+ 'assetTabs', 'assetGrid', 'assetHint', 'btnRot90', 'btnCancelPlace', 'assetScale', 'placedList'].forEach(k => { el[k] = document.getElementById(k); });
 
 const KEY_THEME = 'coconut.theme', KEY_COACH = 'coconut.coach';
 let project, vp, selShot = -1, selFigure = null, playing = false, playBase = 0, runMode = 'online';
@@ -41,6 +44,7 @@ async function boot() {
   if (project.version !== S.PROJECT_VERSION) project = Object.assign(S.newProject(), project, { version: S.PROJECT_VERSION });
 
   vp = new Viewport(el.canvasHolder, { theme: document.documentElement.dataset.theme });
+  window.__vp = vp;   // 自检脚本要读渲染器状态
   vp.onSelect = onViewportSelect;
   vp.onPathPoint = p => { const f = curFigure(); if (!f) return; (f.path = f.path || []).push(p); touch(); renderFigures(); };
   vp.onDragFigure = (id, p) => { const f = project.figures.find(x => x.id === id); if (!f) return; f.p = [p[0], f.p[1], p[1]]; touch(); };
@@ -357,6 +361,93 @@ async function doRender() {
   }
 }
 
+// ---------- 道具库 ----------
+
+let pendingAsset = null, placeRot = 0, placeScale = 1, assetGroup = 'person', thumbCache = {};
+
+function renderAssetTabs() {
+  el.assetTabs.innerHTML = '';
+  for (const g of ASSET_GROUPS) {
+    const b = document.createElement('button');
+    b.className = g.id === assetGroup ? 'on' : 'ghost';
+    b.textContent = g.label + ' ' + ASSETS.filter(a => a.group === g.id).length;
+    b.onclick = () => { assetGroup = g.id; renderAssetTabs(); renderAssetGrid(); };
+    el.assetTabs.appendChild(b);
+  }
+}
+
+function renderAssetGrid() {
+  el.assetGrid.innerHTML = '';
+  for (const a of ASSETS.filter(x => x.group === assetGroup)) {
+    const b = document.createElement('button');
+    b.className = 'asset' + (pendingAsset && pendingAsset.id === a.id ? ' sel' : '');
+    b.innerHTML = '<img' + (thumbCache[a.id] ? ' src="' + thumbCache[a.id] + '"' : ' style="visibility:hidden"') + ' alt=""><span>' + esc(a.label) + '</span>';
+    b.title = a.label + '　约 ' + (a.dims || []).map(d => d + 'm').join('×');
+    b.onclick = () => pickAsset(a);
+    el.assetGrid.appendChild(b);
+  }
+  if (thumbCache.__done !== true) setTimeout(fillThumbs, 60);
+}
+
+let thumbQueue = null;
+function fillThumbs() {
+  const todo = ASSETS.filter(a => !thumbCache[a.id]);
+  if (!todo.length) { thumbCache.__done = true; return; }
+  const a = todo.shift();
+  try { thumbCache[a.id] = thumbOf(a); } catch (e) { thumbCache[a.id] = ''; }
+  thumbQueue = setTimeout(fillThumbs, 0);
+  if (!todo.length) { thumbCache.__done = true; renderAssetGrid(); }
+  else if (Object.keys(thumbCache).length % 6 === 0) renderAssetGrid();
+}
+
+function pickAsset(a) {
+  if (pendingAsset && pendingAsset.id === a.id) { cancelPlace(); return; }
+  pendingAsset = a; placeRot = 0;
+  vp.setGhost(instantiate(a, [0, 0], { seq: nextSeq(a), scale: placeScale, rot: placeRot }));
+  vp.setDragMode('place');
+  el.assetHint.textContent = '在地面上点一下放下（R 转 90°）';
+  renderAssetGrid();
+}
+
+function cancelPlace() {
+  pendingAsset = null;
+  vp.clearGhost();
+  vp.setDragMode('none');
+  el.assetHint.textContent = '点一下拿起，再点地面放下';
+  renderAssetGrid();
+}
+
+function nextSeq(a) { return (project.customObjects || []).filter(d => (d.n || '').startsWith(a.label)).length + 1; }
+
+function placeAt(point) {
+  if (!pendingAsset) return;
+  const def = instantiate(pendingAsset, point, { seq: nextSeq(pendingAsset), scale: placeScale, rot: placeRot });
+  project.customObjects = project.customObjects || [];
+  project.customObjects.push(def);
+  vp.addObject(def);
+  touch(); renderPlaced(); renderOutline();
+  toast('放下：' + def.n + '（' + (pendingAsset.dims || []).join('×') + ' 米）');
+  if (!pendingAsset.keep) cancelPlace();
+}
+
+function renderPlaced() {
+  const list = project.customObjects || [];
+  el.placedList.innerHTML = list.length ? '' : '<div style="color:var(--ink-3);font-size:12px">还没摆道具</div>';
+  list.forEach((d, i) => {
+    const row = document.createElement('div');
+    row.className = 'item';
+    row.innerHTML = '<span class="nm">' + esc(d.n || d.name || ('道具' + (i + 1))) + '</span><span class="x">✕</span>';
+    row.onclick = e => {
+      if (e.target.classList.contains('x')) {
+        vp.removeObject(d.n);
+        project.customObjects.splice(i, 1);
+        touch(); renderPlaced(); renderOutline();
+      } else { vp.setSelected({ type: 'item', id: d.n }); }
+    };
+    el.placedList.appendChild(row);
+  });
+}
+
 // ---------- 绑定 ----------
 
 function bindUI() {
@@ -392,12 +483,12 @@ function bindUI() {
 
   el.btnViewFree.onclick = () => { vp.viewMode = 'free'; setViewButtons('free'); };
   el.btnViewCam.onclick = () => { vp.viewMode = 'cam'; setViewButtons('cam'); };
-  el.selAspect.onchange = () => { project.aspect = el.selAspect.value; vp.aspect = project.aspect; el.btnAspect.textContent = project.aspect; vp.refreshOverlays(); layoutGuide(); touch(); updateShotForm(); };
+  el.selAspect.onchange = () => { project.aspect = el.selAspect.value; vp.aspect = project.aspect; el.btnAspect.textContent = project.aspect; vp.refreshOverlays(); layoutGuide(); touch(); updateShotForm(); renderTimeline(); };
   el.btnAspect.onclick = () => {
     const i = RATIOS.findIndex(r => r.id === project.aspect);
     project.aspect = RATIOS[(i + 1) % RATIOS.length].id;
     el.selAspect.value = project.aspect; el.btnAspect.textContent = project.aspect;
-    vp.aspect = project.aspect; vp.refreshOverlays(); layoutGuide(); touch(); updateShotForm();
+    vp.aspect = project.aspect; vp.refreshOverlays(); layoutGuide(); touch(); updateShotForm(); renderTimeline();
   };
   [['tgGrid', 'grid'], ['tgFru', 'frustums'], ['tgPath', 'paths'], ['tgGuide', '__guide']].forEach(([id, key]) => {
     el[id].onclick = () => {
@@ -442,6 +533,13 @@ function bindUI() {
     toast('链接已复制（工程整个塞在网址里）');
   };
   el.coachClose.onclick = () => { el.coach.classList.add('gone'); localStorage.setItem(KEY_COACH, 'off'); };
+
+  vp.onPlace = p => placeAt(p);
+  el.btnRot90.onclick = () => { placeRot += Math.PI / 2; if (pendingAsset) vp.setGhost(instantiate(pendingAsset, [0, 0], { seq: nextSeq(pendingAsset), scale: placeScale, rot: placeRot })); };
+  el.btnCancelPlace.onclick = cancelPlace;
+  el.assetScale.oninput = () => { placeScale = Number(el.assetScale.value) || 1; if (pendingAsset) vp.setGhost(instantiate(pendingAsset, [0, 0], { seq: nextSeq(pendingAsset), scale: placeScale, rot: placeRot })); };
+  addEventListener('keydown', e => { if (e.code === 'KeyR' && pendingAsset) { e.preventDefault(); el.btnRot90.click(); } });
+  renderAssetTabs(); renderAssetGrid(); renderPlaced();
 
   addEventListener('keydown', e => {
     if (/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;

@@ -114,6 +114,21 @@ try {
   await evl(`document.getElementById('btnPack').click()`); await sleep(500); await shot('06_提示词包');
   await evl(`(()=>{const s=document.getElementById('selAspect');s.value='9:16';s.dispatchEvent(new Event('change'));return s.value})()`);
   await sleep(700); await shot('07_竖屏9比16');
+  // 09 道具库：切到家具分类 → 点沙发 → 幽灵跟着鼠标 → 地面点一下放下
+  const tabs = await evl(`(()=>{const t=[...document.querySelectorAll('#assetTabs button')];const x=t.find(b=>b.textContent.includes('家具'));if(x)x.click();return t.length})()`);
+  await sleep(2500);
+  const grid = await evl(`(()=>{const b=[...document.querySelectorAll('#assetGrid .asset')];const s=b.find(x=>x.textContent.includes('沙发'));if(s)s.click();return {n:b.length, thumb:b.filter(x=>{const i=x.querySelector('img');return i&&i.src.startsWith('data:')}).length}})()`);
+  log(`道具分类 ${tabs} 组｜当前格 ${grid.n} 个｜有缩略图 ${grid.thumb} 个`);
+  await sleep(400);
+  await evl(`(()=>{const c=document.querySelector('#canvasHolder canvas'),r=c.getBoundingClientRect();
+    const x=r.left+r.width*0.42,y=r.top+r.height*0.72;
+    const mk=t=>new PointerEvent(t,{bubbles:true,clientX:x,clientY:y,button:0,pointerId:1});
+    c.dispatchEvent(mk('pointermove')); c.dispatchEvent(mk('pointerdown')); c.dispatchEvent(mk('pointerup')); return 1})()`);
+  await sleep(900);
+  await shot('09_道具库摆放');
+  const placed = await evl(`({placed:document.querySelectorAll('#placedList .item').length, custom:(window.__probe&&1)||0, hint:document.getElementById('assetHint').textContent})`);
+  log('  ' + JSON.stringify(placed));
+
   await evl(`document.getElementById('btnTheme').click()`); await sleep(700); await shot('08_浅色主题');
 
   if (argv.includes('--render')) {
@@ -136,7 +151,9 @@ try {
     return {shots:document.querySelectorAll('.shot-block').length, presets:document.querySelectorAll('#presetList button').length,
       figures:document.querySelectorAll('#figureList .item').length, outline:document.querySelectorAll('#outline .item').length,
       findings:document.querySelectorAll('#checkList .finding').length, summary:g('checkSummary'), cam:g('hudCam'), mode:g('modeBadge'),
-      objects:g('statObjects'), errTip: g('emptyTip')};
+      objects:g('statObjects'), errTip: g('emptyTip'),
+      figColor:(()=>{const v=window.__vp;const one=v&&v._figs&&[...v._figs.values()][0];return one?'#'+one.parts.torso.material.color.getHexString():'no-fig'})(),
+      ghost:(()=>{const v=window.__vp;return v&&v._ghost?'有':'无'})()};
   })()`);
   log('事实清单 ' + JSON.stringify(facts));
   fs.writeFileSync(path.join(OUT, 'facts.json'), JSON.stringify(facts, null, 2), 'utf8');

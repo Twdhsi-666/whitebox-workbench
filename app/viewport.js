@@ -89,25 +89,73 @@ export class Viewport {
     this._buildOverlays();
   }
 
-  addObject(def) {
-    const mats = this.built ? this.built.mats : {};
+  // 支持 group / figure / 基本体递归摆放；parent 用于道具库的缩略图复用同一套代码
+  addObject(def, parent, mats) {
+    const M = mats || (this.built ? this.built.mats : {});
+    if (def.t === 'group') {
+      const g = new THREE.Group();
+      g.position.set(def.p[0], def.p[1], def.p[2]);
+      if (def.rot) g.rotation.set(def.rot[0], def.rot[1], def.rot[2]);
+      g.name = def.n || 'group';
+      (parent || this.world).add(g);
+      const made = [];
+      for (const c of def.children || []) made.push(...this.addObject(c, g, M));
+      return made;
+    }
+    if (def.t === 'figure') {
+      const parts = makeFigure({ height: def.height || 1.75, name: def.n, material: M.accent || M.person });
+      parts.root.position.set(def.p[0], def.p[1], def.p[2]);
+      parts.root.rotation.y = def.facing || 0;
+      applyAction(parts, def.action || 'stand', def.action === 'sit' ? 1 : 0, { seatY: def.seatY != null ? def.seatY : 0.45 });
+      (parent || this.world).add(parts.root);
+      if (!this._figs) this._figs = new Map();
+      const id = def.n || ('fig' + this._figs.size);
+      this._figs.set(id, { root: parts.root, parts, pose: def.action });
+      return [{ id, node: parts.root }];
+    }
     const s = def.s || [0.6, 0.6, 0.6];
     const geo = def.t === 'sphere' ? new THREE.SphereGeometry(s[0], 22, 16)
       : def.t === 'cyl' ? new THREE.CylinderGeometry(s[0], s[1] == null ? s[0] : s[1], s[2], s[3] || 20)
       : new THREE.BoxGeometry(s[0], s[1], s[2]);
-    const mesh = new THREE.Mesh(geo, mats[def.m] || mats.prop || mats.person);
+    const mesh = new THREE.Mesh(geo, M[def.m] || M.prop || M.person);
     mesh.position.set(def.p[0], def.p[1], def.p[2]);
+    if (def.rot) mesh.rotation.set(def.rot[0], def.rot[1], def.rot[2]);
     mesh.castShadow = true; mesh.receiveShadow = true;
     mesh.userData.wm = def;
-    this.world.add(mesh);
-    this.pickables.push(mesh);
-    return mesh;
+    (parent || this.world).add(mesh);
+    if (!parent && this.pickables) this.pickables.push(mesh);
+    return [{ id: def.n, node: mesh, def }];
+  }
+
+  // 半透明幽灵：选中道具后跟着鼠标走，点一下才真落地
+  setGhost(def) {
+    this.clearGhost();
+    if (!def) return;
+    const ghostMats = {};
+    for (const k of Object.keys(this.built.mats)) {
+      if (k.startsWith('__')) continue;
+      const m = new THREE.MeshBasicMaterial({ color: 0xff9a4d, transparent: true, opacity: 0.42, depthWrite: false });
+      ghostMats[k] = m;
+    }
+    this._ghostMats = ghostMats;
+    this._ghost = new THREE.Group();
+    const d = JSON.parse(JSON.stringify(def));
+    d.p = [0, 0, 0];
+    this.addObject(d, this._ghost, ghostMats);
+    this.scene.add(this._ghost);
+  }
+
+  moveGhost(point) { if (this._ghost) this._ghost.position.set(point[0], 0.02, point[1]); }
+
+  clearGhost() {
+    if (this._ghost) { this.scene.remove(this._ghost); this._ghost.traverse(o => o.geometry && o.geometry.dispose()); this._ghost = null; }
+    if (this._ghostMats) { for (const m of Object.values(this._ghostMats)) m.dispose(); this._ghostMats = null; }
   }
 
   removeObject(name) {
     const inPreset = this.built && this.built.items.find(i => i.name === name);
     if (inPreset) { inPreset.node.visible = false; inPreset.hiddenByUser = true; return 'hidden'; }
-    const extra = this.world.children.find(n => n.userData.wm && n.userData.wm.n === name);
+    const extra = this.world.children.find(x => x.name === name || (x.userData.wm && x.userData.wm.n === name));
     if (extra) { this.world.remove(extra); this.pickables = this.pickables.filter(p => p !== extra); return 'removed'; }
     return 'none';
   }
@@ -229,11 +277,14 @@ export class Viewport {
     cam.updateProjectionMatrix();
     if (this.viewMode === 'cam' && this.show.letterbox) {
       const f = this._frame;
-      this.renderer.setScissorTest(true);
+      // 先整屏清一次再开 scissor：只清遮幅内的话，遮幅外会留着上一帧的残影（相机一转就出现鬼影条）
+      this.renderer.setScissorTest(false);
       this.renderer.setClearColor(0x000000, 1);
+      this.renderer.setViewport(0, 0, w, h);
+      this.renderer.clear(true, true, true);
+      this.renderer.setScissorTest(true);
       this.renderer.setViewport(f.x, f.y, f.w, f.h);
       this.renderer.setScissor(f.x, f.y, f.w, f.h);
-      this.renderer.clear(true, true, true);
       this.renderer.render(this.scene, cam);
       this.renderer.setScissorTest(false);
     } else {
@@ -376,6 +427,8 @@ export class Viewport {
       if (this.navState.orbiting) this._orbit(dx, dy);
       else if (this.navState.panning && this.dragMode === 'move' && this.selected && this.selected.type === 'figure' && this.onDragFigure) {
         const p = this._groundPoint(e); if (p) this.onDragFigure(this.selected.id, p);
+      } else if (this.dragMode === 'place' && this._ghost) {
+        const p = this._groundPoint(e); if (p) this.moveGhost(p);
       } else if (this.navState.panning && (e.shiftKey || this.dragMode !== 'none')) this._pan(dx, dy);
     });
     const up = () => { this.navState.orbiting = false; this.navState.panning = false; };
