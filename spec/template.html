@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>白膜场景 · 模板（按规范 v1.0）</title>
+<!--
+  ============================================================
+  白膜 HTML 模板 · 规范 v1.0
+  用法：复制本文件，把 TODO 部分替换成你的场景，
+        保留：importmap / #stage / #panel 结构 / manifest / 8 个接口。
+  自检：见《白膜HTML规范.md》第 6 节。
+  ============================================================
+-->
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; width: 100%;
+    background: #0a0a0a; overflow: hidden; user-select: none;
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  #app { display: flex; width: 100vw; height: 100vh; }
+  #stageWrap { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; padding: 16px; min-width: 0; min-height: 0; background: #0a0a0a; }
+  #stage {
+    aspect-ratio: 16 / 9; width: 100%; max-width: 100%; max-height: 100%;
+    background: #000; position: relative; overflow: hidden;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.9);
+  }
+  #stage canvas { display: block; width: 100% !important; height: 100% !important; }
+  #panel {
+    flex: 0 0 260px; width: 260px; height: 100vh;
+    background: #171717; border-left: 1px solid #2a2a2a;
+    color: #e8e8e8; font-size: 12px; padding: 16px 14px 24px; overflow-y: auto;
+  }
+  #panel h2 { font-size: 13px; font-weight: 600; margin: 0 0 14px 0; letter-spacing: .8px; color: #ffd250; }
+  .btn { background: #222; border: 1px solid #333; color: #ddd; padding: 8px 6px; border-radius: 5px; font-size: 11px; cursor: pointer; }
+  .btn:hover { background: #2d2d2d; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="stageWrap"><div id="stage"></div></div>
+  <aside id="panel">
+    <h2>白膜模板 <span style="font-size:10px;color:#666;font-weight:400">规范 v1.0</span></h2>
+    <button class="btn" id="playBtn">▶ 播放</button>
+    <button class="btn" id="replayBtn">⟲ 重播</button>
+  </aside>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "./assets/three.module.js" } }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+// ============================================================
+// TODO 1: 基础三件套（按需改参数）
+// ============================================================
+const DURATION = 15;                       // TODO 2: 与 manifest.duration 一致
+const stage = document.getElementById('stage');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a1a1a);   // TODO: 白膜建议中性灰/白
+const camera = new THREE.PerspectiveCamera(50, 16 / 9, 0.1, 500);
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(stage.clientWidth || 1280, (stage.clientWidth || 1280) * 9 / 16);
+stage.appendChild(renderer.domElement);
+
+// 灯光（白膜标配）
+scene.add(new THREE.HemisphereLight(0xffffff, 0xcccccc, 2.0));
+const key = new THREE.DirectionalLight(0xffffff, 2.2);
+key.position.set(6, 10, 8);
+scene.add(key);
+
+// ============================================================
+// TODO 3: 搭场景（BoxGeometry 白模即可，记得 castShadow）
+// ============================================================
+function box(w, h, d, color, x, y, z) {
+  const m = new THREE.Mesh(
+    new THREE.BoxGeometry(w, h, d),
+    new THREE.MeshStandardMaterial({ color, roughness: 0.9 })
+  );
+  m.position.set(x, y, z);
+  m.castShadow = true; m.receiveShadow = true;
+  scene.add(m);
+  return m;
+}
+box(40, 0.2, 40, 0xdddddd, 0, -0.1, 0);   // 地面
+box(2, 2, 2, 0xffffff, 0, 1, 0);          // 主体物
+
+// ============================================================
+// TODO 4: renderAt(t) —— 时间轴动画（t 的纯函数！）
+//   所有随时间变化的都写在这里：相机路径、物体运动、显隐。
+// ============================================================
+let curT = 0;
+function renderAt(t) {
+  curT = Math.max(0, Math.min(DURATION, t));
+  // TODO: 例——相机绕场景缓慢旋转 + 推进
+  const a = curT * 0.25;
+  camera.position.set(Math.sin(a) * 8, 3 + Math.sin(curT * 0.5) * 0.5, Math.cos(a) * 8);
+  camera.lookAt(0, 1, 0);
+  renderer.render(scene, camera);
+}
+
+// ============================================================
+// 以下为标准接口区——除 renderer/scene/camera 变量名外不要改
+// ============================================================
+window.__seek = function (t) { curT = Math.max(0, Math.min(DURATION, t)); renderAt(curT); };
+window.__grab = function (t) { window.__seek(t); return renderer.domElement.toDataURL('image/jpeg', 0.92); };
+window.__size = function () { return renderer.domElement.width + 'x' + renderer.domElement.height; };
+window.__glOk = (function () {
+  try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')); }
+  catch (e) { return false; }
+})();
+window.__duration = DURATION;
+window.__playing = false;
+window.__getTime = function () { return curT; };
+
+let rafId = 0, lastMs = 0;
+function loop(ms) {
+  if (!window.__playing) return;
+  const dt = lastMs ? Math.min((ms - lastMs) / 1000, 0.1) : 0;
+  lastMs = ms;
+  curT += dt;
+  if (curT >= DURATION) { curT = DURATION; renderAt(curT); window.__playing = false; updateBtn(); return; }
+  renderAt(curT);
+  rafId = requestAnimationFrame(loop);
+}
+window.__play = function () {
+  if (window.__playing) return;
+  if (curT >= DURATION) curT = 0;
+  window.__playing = true; lastMs = 0; updateBtn();
+  rafId = requestAnimationFrame(loop);
+};
+window.__pause = function () {
+  window.__playing = false; cancelAnimationFrame(rafId); updateBtn();
+};
+
+// ============================================================
+// 嵌入模式（工作台 iframe 加载时）——不要改
+// ============================================================
+if (window.__EMBED__ === true) {
+  document.getElementById('panel')?.remove();
+  Object.assign(document.getElementById('stage').style, {
+    width: '100%', height: '100%', maxWidth: 'none', maxHeight: 'none', aspectRatio: 'auto'
+  });
+  document.body.style.overflow = 'hidden';
+  const resize = () => renderer.setSize(stage.clientWidth, stage.clientHeight);
+  window.addEventListener('resize', resize); resize();
+}
+
+// ============================================================
+// 独立运行时的面板按钮（嵌入模式下不存在）——可按需改
+// ============================================================
+const playBtn = document.getElementById('playBtn');
+const replayBtn = document.getElementById('replayBtn');
+function updateBtn() { if (playBtn) playBtn.textContent = window.__playing ? '⏸ 暂停' : '▶ 播放'; }
+playBtn?.addEventListener('click', () => window.__playing ? window.__pause() : window.__play());
+replayBtn?.addEventListener('click', () => { window.__pause(); renderAt(0); window.__play(); });
+
+// ============================================================
+// TODO 5: 元数据清单——按实际场景填
+// ============================================================
+</script>
+
+<script type="application/json" id="whitebox-manifest">
+{
+  "spec": "whitebox-html/1.0",
+  "title": "白膜模板场景",
+  "author": "无",
+  "duration": 15,
+  "location": { "name": "无", "lat": 0, "lng": 0 },
+  "shots": [
+    { "t": 0, "label": "起幅" },
+    { "t": 7.5, "label": "落幅" }
+  ],
+  "notes": "TODO: 分镜说明"
+}
+</script>
+</body>
+</html>
