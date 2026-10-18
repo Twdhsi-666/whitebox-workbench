@@ -1,0 +1,11 @@
+输出/
+tools/shots/
+tools/*.json
+.websculpt/
+node_modules/
+*.log
+.DS_Store
+Thumbs.db
+
+# 竞品官网文案拷贝，只作本地需求参考，不进公开仓库
+我想要的功能.txt

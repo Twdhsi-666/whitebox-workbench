@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>椰子工作台 · AI 视频白膜预演</title>
+<meta name="description" content="本地白膜预演工作台：摆场景、排运镜、一键出片，产出直接喂给视频生成模型当运镜参考。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='6' y='12' width='20' height='16' rx='2' fill='none' stroke='%23ff9a4d' stroke-width='2'/%3E%3Ccircle cx='16' cy='7' r='4' fill='%23ff9a4d'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/workbench.css">
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.js" } }
+</script>
+</head>
+<body>
+<div id="app">
+
+  <header id="topbar">
+    <div class="brand"><span class="cn">🥥 椰子工作台</span><span class="en">COCONUT&nbsp;WORKBENCH</span></div>
+    <input id="projName" type="text" spellcheck="false" title="工程名">
+    <span class="badge" id="modeBadge">检测中…</span>
+    <div class="spacer"></div>
+    <button id="btnAspect" class="ghost" title="切换画幅">16:9</button>
+    <button id="btnTheme" class="ghost" title="深/浅色">◐</button>
+    <button id="btnExportJson" class="ghost" title="导出工程 JSON">导出</button>
+    <button id="btnImportJson" class="ghost" title="导入工程 JSON">导入</button>
+    <button id="btnShare" class="ghost" title="把当前工程编进网址，发给别人">分享链接</button>
+    <button id="btnRender" class="primary" title="一键出片">一键出片</button>
+  </header>
+
+  <div id="main">
+
+    <aside id="left">
+      <section class="sec">
+        <h3>① 摆场景 <span class="hint" id="presetHint"></span></h3>
+        <div class="body">
+          <div class="presets" id="presetList"></div>
+          <div class="row"><label>物体数</label><span id="statObjects" class="badge">—</span></div>
+        </div>
+      </section>
+
+      <section class="sec">
+        <h3>② 放人物 <span class="hint">圆柱+球头</span></h3>
+        <div class="body">
+          <div class="grid2">
+            <button id="btnAddFigure">＋ 加一个人</button>
+            <button id="btnAddProp" class="ghost">＋ 加一个方块</button>
+          </div>
+          <div class="list" id="figureList"></div>
+          <div class="row"><label>动作</label><select id="figAction"></select></div>
+          <div class="row">
+            <label>走位</label>
+            <div class="grid2">
+              <button id="btnDrawPath" class="ghost" title="在地面上从左到右画一条线">✎ 画路线</button>
+              <button id="btnClearPath" class="ghost">清空</button>
+            </div>
+          </div>
+          <div class="grid2">
+            <div class="row"><label>起跑</label><input id="figStart" type="number" step="0.1" min="0"></div>
+            <div class="row"><label>到达</label><input id="figEnd" type="number" step="0.1" min="0"></div>
+          </div>
+          <div class="row"><label>速度</label><span id="figSpeed" class="badge">—</span></div>
+          <div class="row"><label>身高</label><input id="figHeight" type="number" step="0.05" min="0.4" max="2.4"></div>
+        </div>
+      </section>
+
+      <section class="sec">
+        <h3>场景大纲 <span class="hint">点选后按 . 聚焦</span></h3>
+        <div class="body"><div class="list outline" id="outline"></div></div>
+      </section>
+    </aside>
+
+    <div id="center">
+      <div id="stage">
+        <div id="canvasHolder"></div>
+        <div class="hud" id="hudCam"></div>
+        <div class="hud" id="hudMode"></div>
+        <div id="emptyTip" class="hidden"></div>
+        <div id="coach">
+          <div class="step" data-step="1"><span class="dot">1</span>选场景</div>
+          <div class="step" data-step="2"><span class="dot">2</span>放人</div>
+          <div class="step" data-step="3"><span class="dot">3</span>排镜头</div>
+          <div class="step" data-step="4"><span class="dot">4</span>出片</div>
+          <span class="bubble"></span>
+          <span id="coachText" style="font-size:12px;color:var(--ink-2)"></span>
+          <button class="ghost" id="coachClose" style="padding:2px 6px">✕</button>
+        </div>
+      </div>
+
+      <div id="timeline">
+        <div id="tlHead">
+          <button id="btnPlay" title="空格播放">▶</button>
+          <span id="tlTime">0.00s / 0.00s</span>
+          <span>FPS</span><input id="inpFps" type="number" min="12" max="60" step="1" style="width:64px">
+          <span>模式</span>
+          <select id="selMode" style="padding:4px 6px">
+            <option value="cuts">硬切换</option>
+            <option value="continuous">一镜到底（段间混合）</option>
+          </select>
+          <input id="inpBlend" type="number" min="0" max="3" step="0.1" style="width:60px" title="段间过渡秒数，竞品实操口径 ≥0.8 秒">
+          <div class="spacer"></div>
+          <button id="btnAddShot" class="primary" title="从当前视角新建机位">＋ 从当前视角加机位</button>
+        </div>
+        <div id="tlTrack"></div>
+      </div>
+    </div>
+
+    <aside id="right">
+      <section class="sec">
+        <h3>③ 排镜头 <span class="hint" id="shotCount"></span></h3>
+        <div class="body">
+          <div class="list" id="shotList"></div>
+          <div class="row"><label>名称</label><input id="shotName" type="text"></div>
+          <div class="row"><label>运镜</label><select id="shotMove"></select></div>
+          <div class="row"><label>时长</label><input id="shotDur" type="number" step="0.1" min="0.2" max="30"></div>
+          <div class="grid2">
+            <div class="row"><label>缓动</label><select id="shotEase"></select></div>
+            <div class="row"><label>焦段</label><select id="shotMmSel"></select></div>
+          </div>
+          <div class="row"><label>FOV</label><div style="display:flex;gap:6px;align-items:center"><input id="shotMm" type="range" min="14" max="135" step="1" style="flex:1"><span id="fovRead" class="badge">—</span></div></div>
+          <div class="row"><label>跟随</label><select id="shotSubject"></select></div>
+          <div id="moveParams" class="body" style="padding:0"></div>
+          <div class="row"><label>要发生什么</label><input id="shotCue" type="text" placeholder="例：他推门进来，镜头向右横移"></div>
+          <div class="grid2">
+            <button id="btnShotDup" class="ghost">复制镜头</button>
+            <button id="btnShotDel" class="ghost">删除镜头</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="sec">
+        <h3>相机与画幅</h3>
+        <div class="body">
+          <div class="row"><label>视角</label><div class="grid2">
+            <button id="btnViewFree" class="on">自由视角</button>
+            <button id="btnViewCam">相机视角</button>
+          </div></div>
+          <div class="row"><label>画幅</label><select id="selAspect"></select></div>
+          <div class="row"><label>叠加</label><div class="grid2">
+            <button id="tgGrid" class="on">地面网格</button>
+            <button id="tgFru" class="on">机位视锥</button>
+            <button id="tgPath" class="on">走位线</button>
+            <button id="tgGuide" class="on">安全框</button>
+          </div></div>
+        </div>
+      </section>
+
+      <section class="sec">
+        <h3>④ 逻辑体检 <span class="hint" id="checkTime"></span></h3>
+        <div class="body">
+          <div class="summary" id="checkSummary"></div>
+          <div class="list" id="checkList"></div>
+        </div>
+      </section>
+
+      <section class="sec">
+        <h3>⑤ 喂给 AI 的提示词包</h3>
+        <div class="body">
+          <button id="btnPack" class="primary" style="width:100%">生成提示词包</button>
+          <pre class="pack hidden" id="packOut"></pre>
+          <div class="grid2">
+            <button id="btnPackCopy" class="ghost">复制</button>
+            <button id="btnPackDl" class="ghost">下成 .md</button>
+          </div>
+        </div>
+      </section>
+    </aside>
+  </div>
+
+  <footer id="statusbar">
+    <span><kbd>右键拖</kbd>环绕</span><span><kbd>滚轮</kbd>推拉</span><span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>飞行 <kbd>Shift</kbd>加速 <kbd>Q</kbd><kbd>E</kbd>升降</span>
+    <span><kbd>1</kbd><kbd>3</kbd><kbd>7</kbd><kbd>9</kbd>前/右/顶/后 <kbd>Ctrl</kbd>反向</span>
+    <span><kbd>0</kbd>相机视角</span><span><kbd>.</kbd>聚焦选中</span><span><kbd>G</kbd>拖动人物</span><span><kbd>空格</kbd>播放</span>
+    <div class="spacer"></div>
+    <span id="saveState">未保存</span>
+  </footer>
+</div>
+
+<div id="jobMask" class="hidden">
+  <div id="jobCard">
+    <div style="font-weight:700;font-size:14px" id="jobTitle">出片中</div>
+    <div id="jobBar"><i></i></div>
+    <div style="font:11.5px/1.6 var(--mono);color:var(--ink-2)" id="jobLog">准备…</div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button id="jobCancel" class="ghost">取消</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ES 模块在双击打开（file://）时会被浏览器按 CORS 拦死，而且不报错、只是白屏。
+// 所以这里提前拦住，告诉他走 .bat。见 docs/决策记录.md。
+if (location.protocol === 'file:') {
+  document.addEventListener('DOMContentLoaded', function () {
+    document.getElementById('app').innerHTML =
+      '<div style="padding:40px;max-width:640px;margin:0 auto;line-height:2;font-size:15px">' +
+      '<b style="font-size:20px">别用双击打开</b><br><br>' +
+      '浏览器的安全规则不允许这种模块页从 file:// 读文件，页面只会白给你看。<br>' +
+      '请<b>双击目录里的 <code>启动工作台.bat</code></b>，它会起一个只在本机的小服务再打开浏览器。<br><br>' +
+      '已经在线用了？地址应该是 <code>http://127.0.0.1:8951/</code> 或 GitHub Pages 的 https 地址。</div>';
+  });
+}
+</script>
+<script type="module" src="app/main.js"></script>
+<script nomodule>
+document.getElementById('emptyTip').classList.remove('hidden');
+document.getElementById('emptyTip').innerHTML = '这个浏览器不支持 ES 模块，请换 Edge / Chrome 最新版打开。';
+</script>
+</body>
+</html>
