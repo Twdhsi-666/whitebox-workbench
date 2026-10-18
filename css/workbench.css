@@ -171,3 +171,9 @@ kbd { background: var(--chip); border: 1px solid var(--line); border-bottom-widt
 .asset { display: grid; gap: 2px; justify-items: center; padding: 5px 3px; font-size: 11px; line-height: 1.25; }
 .asset img { width: 100%; height: 46px; object-fit: contain; pointer-events: none; }
 .asset.sel { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: var(--panel); }
+
+/* 外来白膜控制条 */
+#extBar { position:absolute; left:12px; right:12px; top:56px; display:flex; align-items:center; gap:8px; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:7px 10px; box-shadow:0 6px 22px #0006; z-index:5; }
+#extBar input[type=range] { flex:1 1 auto; min-width:60px; }
+#extWarn { flex-basis:100%; font-size:11.5px; color:var(--warn); line-height:1.5; }
+#extWarn:empty { display:none; }

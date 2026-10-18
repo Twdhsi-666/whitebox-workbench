@@ -7,6 +7,7 @@ import { ACTION_LIST } from '../engine/figure.js';
 import { runAll } from '../engine/checks.js';
 import { ASSETS, ASSET_GROUPS, instantiate } from '../engine/assets.js';
 import { thumbOf } from './thumbs.js';
+import { External } from './external.js';
 import { buildPack } from './promptpack.js';
 import { renderVideo } from './exporter.js';
 
@@ -20,7 +21,8 @@ const el = {};
  'moveParams', 'shotCue', 'btnShotDup', 'btnShotDel', 'btnViewFree', 'btnViewCam', 'selAspect', 'tgGrid', 'tgFru',
  'tgPath', 'tgGuide', 'checkSummary', 'checkList', 'checkTime', 'btnPack', 'packOut', 'btnPackCopy', 'btnPackDl',
  'saveState', 'jobMask', 'jobTitle', 'jobBar', 'jobLog', 'jobCancel',
- 'assetTabs', 'assetGrid', 'assetHint', 'btnRot90', 'btnCancelPlace', 'assetScale', 'placedList'].forEach(k => { el[k] = document.getElementById(k); });
+ 'assetTabs', 'assetGrid', 'assetHint', 'btnRot90', 'btnCancelPlace', 'assetScale', 'placedList',
+ 'btnImportExt', 'extBar', 'extName', 'extTier', 'extPlay', 'extSeek', 'extTime', 'extShot', 'extSave', 'extExit', 'extWarn'].forEach(k => { el[k] = document.getElementById(k); });
 
 const KEY_THEME = 'coconut.theme', KEY_COACH = 'coconut.coach';
 let project, vp, selShot = -1, selFigure = null, playing = false, playBase = 0, runMode = 'online';
@@ -361,6 +363,56 @@ async function doRender() {
   }
 }
 
+// ---------- 外来白膜（导入任意 AI 生成的 HTML）----------
+
+let ext = null, extHtml = null, extTimer = 0;
+
+async function importExternal(text, name) {
+  exitExternal(false);
+  extHtml = text;
+  ext = new External(el.canvasHolder);
+  window.__ext = ext;
+  el.extName.textContent = name || '外来白膜';
+  el.extTier.textContent = '连接中…';
+  el.extBar.classList.remove('hidden');
+  const r = await ext.load(text);
+  if (!r.ok) {
+    el.extTier.textContent = '没接上';
+    el.extWarn.textContent = r.error + ((r.warnings || []).length ? '｜' + r.warnings.join('｜') : '');
+    toast('这个页面接不上桥：' + r.error.slice(0, 40));
+    return;
+  }
+  const i = r.info;
+  el.extTier.textContent = i.tier === 'A' ? '守规范 · 可逐帧出片' : '旧页面 · 只能预览';
+  el.extTier.className = 'badge ' + (i.tier === 'A' ? 'local' : 'online');
+  el.extSeek.max = String(Math.max(1, i.duration));
+  el.extWarn.textContent = (r.warnings || []).concat(i.missing && i.missing.length ? ['缺接口：' + i.missing.join(' ')] : []).join('｜');
+  extTimer = setInterval(async () => {
+    const st = await ext.state();
+    if (st.ok) { el.extSeek.value = String(st.t); el.extTime.textContent = st.t.toFixed(2) + 's / ' + (st.duration || 0).toFixed(2) + 's'; }
+  }, 400);
+  toast('已接入：' + name + '（时长 ' + i.duration.toFixed(1) + ' 秒，' + (i.tier === 'A' ? '守规范' : '旧页面兼容层') + '）');
+}
+
+function exitExternal(hint = true) {
+  if (extTimer) clearInterval(extTimer);
+  extTimer = 0;
+  if (ext) { ext.destroy(); ext = null; }
+  el.extBar.classList.add('hidden');
+  el.extWarn.textContent = '';
+  if (hint) toast('已退出外来白膜，回到工作台');
+}
+
+function pickExternalFile() {
+  const i = document.createElement('input');
+  i.type = 'file'; i.accept = '.html,.htm,text/html';
+  i.onchange = async () => {
+    try { const t = await i.files[0].text(); importExternal(t, i.files[0].name); }
+    catch (e) { toast('读不了这个文件：' + e.message.slice(0, 50)); }
+  };
+  i.click();
+}
+
 // ---------- 道具库 ----------
 
 let pendingAsset = null, placeRot = 0, placeScale = 1, assetGroup = 'person', thumbCache = {};
@@ -510,7 +562,7 @@ function bindUI() {
   el.btnPack.onclick = showPack;
   el.btnPackCopy.onclick = async () => { try { await navigator.clipboard.writeText(el.packOut.textContent); toast('已复制'); } catch (e) { toast('浏览器不让直接复制，手选一遍吧'); } };
   el.btnPackDl.onclick = () => S.download(`${project.name || '椰子工作台'}_提示词包.md`, el.packOut.textContent, 'text/markdown');
-  el.btnRender.onclick = doRender;
+  el.btnRender.onclick = () => { if (ext) { toast(el.extTier.textContent.includes('守规范') ? '外来白膜的逐帧出片还在做，先退出它用工作台自己的场景出片' : '旧页面只能预览，不能逐帧出片（跳转精度撑不住）'); return; } doRender(); };
   el.jobCancel.onclick = () => { window.__cancelRender = true; };
 
   el.btnExportJson.onclick = () => S.download(`${project.name || 'project'}.coco.json`, JSON.stringify(project, null, 2), 'application/json');
@@ -540,6 +592,39 @@ function bindUI() {
   el.assetScale.oninput = () => { placeScale = Number(el.assetScale.value) || 1; if (pendingAsset) vp.setGhost(instantiate(pendingAsset, [0, 0], { seq: nextSeq(pendingAsset), scale: placeScale, rot: placeRot })); };
   addEventListener('keydown', e => { if (e.code === 'KeyR' && pendingAsset) { e.preventDefault(); el.btnRot90.click(); } });
   renderAssetTabs(); renderAssetGrid(); renderPlaced();
+
+  el.btnImportExt.onclick = pickExternalFile;
+  el.extExit.onclick = () => exitExternal();
+  el.extPlay.onclick = async () => {
+    if (!ext) return;
+    const st = await ext.state();
+    if (st.ok && st.playing) { await ext.pause(); el.extPlay.textContent = '▶'; }
+    else { await ext.play(); el.extPlay.textContent = '❚❚'; }
+  };
+  el.extSeek.oninput = async () => { const r = await ext.seek(Number(el.extSeek.value)); if (r.ok) el.extTime.textContent = r.t.toFixed(2) + 's'; };
+  el.extShot.onclick = async () => {
+    const r = await ext.grab(Number(el.extSeek.value));
+    if (!r.ok || !r.dataURL) return toast('截图失败：' + (r.error || '子页没给图'));
+    const a = document.createElement('a'); a.href = r.dataURL; a.download = (el.extName.textContent || 'frame') + '_t' + Number(el.extSeek.value).toFixed(2) + '.jpg'; a.click();
+    toast('已存一张截图');
+  };
+  el.extSave.onclick = async () => {
+    if (runMode !== 'local') return toast('在线模式存不了盘，用「导出」或本地模式');
+    const r = await fetch('/api/model/save?name=' + encodeURIComponent(el.extName.textContent || 'scene'), { method: 'POST', body: extHtml });
+    const j = await r.json();
+    toast(j.ok ? '已存进 models/' + j.name : '存失败：' + (j.error || ''));
+  };
+  if (runMode === 'local') {
+    fetch('/api/models').then(r => r.json()).then(j => {
+      if (!j.ok || !j.files.length) return;
+      el.btnImportExt.insertAdjacentHTML('afterend', '<select id="extLib" title="库里已有的外来白膜"><option value="">库里的白膜 ' + j.files.length + '</option>' + j.files.map(f => '<option value="' + f.name + '">' + f.name.replace(/.html?$/i, '') + '</option>').join('') + '</select>');
+      document.getElementById('extLib').onchange = async e => {
+        const f = e.target.value; if (!f) return;
+        const t = await (await fetch('/models/' + encodeURIComponent(f))).text();
+        importExternal(t, f);
+      };
+    }).catch(() => {});
+  }
 
   addEventListener('keydown', e => {
     if (/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;

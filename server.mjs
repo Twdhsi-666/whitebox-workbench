@@ -105,6 +105,28 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { ok: true, file: r.out, note: `${job.got} 帧 → ${(r.size / 1048576).toFixed(2)}MB MP4`, firsts: path.join(job.dir, '首帧') });
     }
 
+    if (p === '/api/models') {
+      const dir = path.join(ROOT, 'models');
+      fs.mkdirSync(dir, { recursive: true });
+      const files = fs.readdirSync(dir).filter(f => /\.html?$/i.test(f)).map(f => {
+        const st = fs.statSync(path.join(dir, f));
+        return { name: f, bytes: st.size, mtime: st.mtime.toISOString().slice(0, 16).replace('T', ' ') };
+      });
+      return json(res, 200, { ok: true, files });
+    }
+
+    if (p === '/api/model/save' && req.method === 'POST') {
+      const raw = String(url.searchParams.get('name') || 'scene.html');
+      const name = (raw.replace(/[^\w.\-一-龥]/g, '_').slice(0, 70) || 'scene') .replace(/\.?html?$/i, '') + '.html';
+      const buf = await readBody(req);
+      if (buf.length < 40) return json(res, 400, { ok: false, error: '内容太小' });
+      if (buf.length > 20_000_000) return json(res, 400, { ok: false, error: '超过 20MB，不像一个白膜页面' });
+      const dir = path.join(ROOT, 'models');
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, name), buf);
+      return json(res, 200, { ok: true, name, url: '/models/' + encodeURIComponent(name), bytes: buf.length });
+    }
+
     if (p === '/api/jobs') return json(res, 200, { ok: true, jobs: [...jobs.values()].map(j => ({ id: j.id, dir: j.dir, got: j.got, frames: j.frames })) });
 
     // 静态

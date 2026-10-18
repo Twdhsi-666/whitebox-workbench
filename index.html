@@ -24,6 +24,7 @@
     <button id="btnExportJson" class="ghost" title="导出工程 JSON">导出</button>
     <button id="btnImportJson" class="ghost" title="导入工程 JSON">导入</button>
     <button id="btnShare" class="ghost" title="把当前工程编进网址，发给别人">分享链接</button>
+    <button id="btnImportExt" class="ghost" title="把任意 AI 生成的白膜 HTML 拖进来统一控制">导入外来白膜</button>
     <button id="btnRender" class="primary" title="一键出片">一键出片</button>
   </header>
 
@@ -89,6 +90,16 @@
         <div class="hud" id="hudCam"></div>
         <div class="hud" id="hudMode"></div>
         <div id="emptyTip" class="hidden"></div>
+        <div id="extBar" class="hidden">
+          <b id="extName">外来白膜</b><span class="badge" id="extTier">—</span>
+          <button id="extPlay">▶</button>
+          <input id="extSeek" type="range" min="0" max="15" step="0.01" value="0">
+          <span id="extTime" style="font:11px/1 var(--mono)">0.00s</span>
+          <button id="extShot" class="ghost" title="截当前帧">截图</button>
+          <button id="extSave" class="ghost" title="存进 models/ 目录">存进库</button>
+          <button id="extExit" class="ghost">退出</button>
+          <div id="extWarn"></div>
+        </div>
         <div id="coach">
           <div class="step" data-step="1"><span class="dot">1</span>选场景</div>
           <div class="step" data-step="2"><span class="dot">2</span>放人</div>
