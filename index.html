@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>白膜工作台 · Whitebox Workbench</title>
+<meta name="description" content="AI 视频白膜场景的导入、播放与管理工作台。预设环境搭白模，或导入任意 AI 生成的白膜 HTML，统一控制播放、跳转、截图。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cg fill='none' stroke='%23ffd250' stroke-width='2' stroke-linejoin='round'%3E%3Cpath d='M16 3l13 7.5v11L16 29 3 21.5v-11z'/%3E%3Cpath d='M3 10.5L16 18l13-7.5M16 18v11'/%3E%3C/g%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/workbench.css">
+<script type="importmap">
+{ "imports": { "three": "./assets/three.module.js" } }
+</script>
+</head>
+<body>
+<div id="app">
+
+  <!-- ============================================================
+       视图一：入口（Cinemap 风 · 深色星空 + 预设 + 导入）
+       ============================================================ -->
+  <div id="view-entry">
+    <canvas id="starfield"></canvas>
+
+    <header class="en-top">
+      <div class="brand">
+        <svg class="brand-logo" viewBox="0 0 32 32" width="26" height="26">
+          <circle cx="16" cy="16" r="12.5" fill="none" stroke="#ffd250" stroke-width="1.8"/>
+          <ellipse cx="16" cy="16" rx="12.5" ry="4.8" fill="none" stroke="#ffd250" stroke-width="1" opacity=".55"/>
+          <path d="M16 3.5v25" stroke="#ffd250" stroke-width="1" opacity=".55"/>
+          <circle cx="16" cy="16" r="2.2" fill="#ffd250"/>
+        </svg>
+        <div class="brand-text">
+          <span class="cn">白膜工作台</span>
+          <span class="en">WHITEBOX&nbsp;WORKBENCH</span>
+        </div>
+      </div>
+      <div class="en-top-actions">
+        <button class="btn" id="enBtnLibrary">场景库</button>
+        <button class="btn" id="enBtnSpec">规范</button>
+        <a class="btn ghost" href="https://github.com/Twdhsi-666/whitebox-workbench" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" width="14" height="14"><path d="M12 2a10 10 0 00-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.6 9.6 0 015 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0012 2z" fill="currentColor"/></svg>
+          GitHub
+        </a>
+      </div>
+    </header>
+
+    <div class="en-scroll">
+      <section class="en-hero">
+        <div class="en-mascot">
+          <svg viewBox="0 0 16 16" width="72" height="72" shape-rendering="crispEdges">
+            <rect x="4" y="3" width="8" height="1" fill="#ffd250"/>
+            <rect x="3" y="4" width="10" height="6" fill="#f2efe8"/>
+            <rect x="4" y="10" width="8" height="2" fill="#e3dfd4"/>
+            <rect x="4" y="6" width="1" height="1" fill="#23262d"/>
+            <rect x="7" y="6" width="2" height="1" fill="#23262d"/>
+            <rect x="11" y="6" width="1" height="1" fill="#23262d"/>
+            <rect x="6" y="8" width="4" height="1" fill="#c9c5b8"/>
+            <rect x="3" y="4" width="1" height="1" fill="#ffd250"/>
+            <rect x="12" y="4" width="1" height="1" fill="#ffd250"/>
+            <rect x="4" y="12" width="2" height="1" fill="#e3dfd4"/>
+            <rect x="10" y="12" width="2" height="1" fill="#e3dfd4"/>
+          </svg>
+        </div>
+        <h1>先把镜头想清楚，再让 AI 去拍</h1>
+        <p class="en-sub">用预设环境搭一个 3D 白模场景，或把任意 AI 生成的白膜 HTML 导入工作台——统一管理、播放、跳转、截图。</p>
+        <div class="en-cards">
+          <button class="en-card" id="enCardImport">
+            <span class="en-card-icon">
+              <svg viewBox="0 0 24 24" width="26" height="26"><path d="M12 3l-5 5h3v6h4V8h3l-5-5zM5 18h14v2H5v-2z" fill="currentColor"/></svg>
+            </span>
+            <span class="en-card-text">
+              <b>导入白膜 HTML</b>
+              <i>DeepSeek / ChatGPT / Claude 生成的都能用，旧格式自动适配</i>
+            </span>
+          </button>
+          <button class="en-card primary" id="enCardNew">
+            <span class="en-card-icon">
+              <svg viewBox="0 0 24 24" width="26" height="26"><path d="M12 2l-2.4 2.4H6v3.6L3.6 10 6 12.4V16h3.6L12 18.4 14.4 16H18v-3.6L20.4 10 18 7.6V4h-3.6L12 2zm-1 6h2v3h3v2h-3v3h-2v-3H8v-2h3V8z" fill="currentColor"/></svg>
+            </span>
+            <span class="en-card-text">
+              <b>新建白膜场景</b>
+              <i>预设环境 + 人物 / 汽车 / 房间，直接摆进画面</i>
+            </span>
+          </button>
+        </div>
+      </section>
+
+      <section class="en-sec">
+        <div class="en-sec-head">
+          <h2>预设环境</h2>
+          <span class="en-sec-tip">选一个开局，进去后随意添加资产</span>
+        </div>
+        <div class="env-grid" id="envGrid"></div>
+      </section>
+
+      <section class="en-sec">
+        <div class="en-sec-head">
+          <h2>我的场景</h2>
+          <span class="en-sec-tip" id="enCount">0 个</span>
+        </div>
+        <div class="mine-grid" id="mineGrid"></div>
+      </section>
+
+      <footer class="en-foot">
+        白膜工作台 · 本地运行不上传 · <a href="https://twdhsi-666.github.io/whitebox-workbench/" target="_blank">在线版</a>
+      </footer>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       视图二：白模编辑器（Cinemap 导演台精简版 · 浅色）
+       ============================================================ -->
+  <div id="view-editor" hidden>
+    <header class="ed-top">
+      <button class="ed-back" id="edBack" title="返回入口">
+        <svg viewBox="0 0 24 24" width="16" height="16"><path d="M15.4 7.4L14 6l-6 6 6 6 1.4-1.4-4.6-4.6 4.6-4.6z" fill="currentColor"/></svg>
+      </button>
+      <span class="ed-env-badge" id="edEnvBadge">空房间</span>
+      <input class="ed-name" id="edName" value="未命名场景" spellcheck="false" maxlength="40">
+      <div class="ed-top-actions">
+        <button class="ed-btn" id="edShot" title="保存当前画面">截图</button>
+        <button class="ed-btn" id="edGrid" title="显示/隐藏地面网格">网格</button>
+        <button class="ed-btn primary" id="edSave">保存</button>
+      </div>
+    </header>
+
+    <div class="ed-body">
+      <nav class="ed-rail" id="edRail"></nav>
+      <div class="ed-drawer" id="edDrawer" hidden>
+        <div class="ed-drawer-head">
+          <input id="edAssetSearch" type="text" placeholder="搜索资产…" autocomplete="off">
+          <button id="edDrawerClose" title="收起">×</button>
+        </div>
+        <div class="ed-asset-grid" id="edAssetGrid"></div>
+        <div class="ed-drawer-foot">点击放置到场景中心</div>
+      </div>
+      <div class="ed-viewport" id="edViewport">
+        <div class="ed-vp-tip">左键旋转 · 滚轮缩放 · 右键/Shift 平移 · 点击资产选中 · 拖动移动</div>
+      </div>
+      <aside class="ed-inspect" id="edInspect"></aside>
+    </div>
+
+    <footer class="ed-bottom">
+      <div class="ed-cams" id="edCams">
+        <button class="ed-chip add" id="edAddCam">＋ 保存机位</button>
+      </div>
+      <div class="ed-shots" id="edShots"></div>
+      <div class="ed-bottom-ops">
+        <button class="ed-btn danger" id="edDel">删除选中</button>
+      </div>
+    </footer>
+  </div>
+
+  <!-- ============================================================
+       视图三：场景库（卡片网格 / 播放器 · 原有功能）
+       ============================================================ -->
+  <div id="view-library" hidden>
+    <header id="topbar">
+      <button class="btn ghost lib-back" id="libBack">← 入口</button>
+      <div class="brand">
+        <svg class="brand-logo" viewBox="0 0 32 32" width="26" height="26">
+          <circle cx="16" cy="16" r="12.5" fill="none" stroke="#ffd250" stroke-width="1.8"/>
+          <ellipse cx="16" cy="16" rx="12.5" ry="4.8" fill="none" stroke="#ffd250" stroke-width="1" opacity=".55"/>
+          <path d="M16 3.5v25" stroke="#ffd250" stroke-width="1" opacity=".55"/>
+          <circle cx="16" cy="16" r="2.2" fill="#ffd250"/>
+        </svg>
+        <div class="brand-text">
+          <span class="cn">白膜工作台</span>
+          <span class="en">WHITEBOX&nbsp;WORKBENCH</span>
+        </div>
+      </div>
+
+      <div class="search">
+        <svg viewBox="0 0 24 24" width="14" height="14"><path d="M10 2a8 8 0 105.3 14l4.9 4.9 1.4-1.4-4.9-4.9A8 8 0 0010 2zm0 2a6 6 0 110 12 6 6 0 010-12z" fill="currentColor"/></svg>
+        <input id="searchInput" type="text" placeholder="搜索场景标题 / 作者 / 取景地…" autocomplete="off">
+      </div>
+
+      <div class="actions">
+        <button class="btn primary" id="btnImport">
+          <svg viewBox="0 0 24 24" width="13" height="13"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z" fill="currentColor"/></svg>
+          导入 HTML
+        </button>
+        <button class="btn" id="btnNewNative">新建白膜</button>
+        <button class="btn" id="btnSpec">规范</button>
+        <a class="btn ghost" id="btnGithub" href="https://github.com/Twdhsi-666/whitebox-workbench" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" width="14" height="14"><path d="M12 2a10 10 0 00-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.6 9.6 0 015 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0012 2z" fill="currentColor"/></svg>
+          GitHub
+        </a>
+      </div>
+    </header>
+
+    <main id="main">
+      <aside id="library">
+        <div class="lib-head">
+          <span>场景库</span>
+          <span class="lib-count" id="libCount">0</span>
+          <span class="lib-ops">
+            <button id="btnExportProj" title="导出全部场景为项目 JSON">导出</button>
+            <button id="btnClearAll" title="清空全部场景">清空</button>
+          </span>
+        </div>
+        <div id="sceneList"></div>
+        <div class="lib-foot">
+          <div id="stats"></div>
+          <button class="btn wide" id="btnLoadExample">载入示例场景（规范演示）</button>
+        </div>
+      </aside>
+
+      <section id="viewport">
+        <div id="gridView"><div id="gridCards"></div></div>
+        <div id="emptyHint">
+          <div class="empty-icon">◍</div>
+          <div class="empty-title">把 AI 生成的白膜 HTML 拖进来</div>
+          <div class="empty-sub">支持规范文件（完整控制）与旧文件（兼容层自动适配）<br>点「规范」查看导入标准，或先「载入示例场景」体验</div>
+        </div>
+        <div id="dropMask" hidden>
+          <div class="drop-box">
+            <div class="drop-icon">⬇</div>
+            <div>松开鼠标 · 导入白膜 HTML / 项目 JSON</div>
+          </div>
+        </div>
+      </section>
+
+      <aside id="detail" hidden></aside>
+    </main>
+  </div>
+
+  <div id="toasts"></div>
+
+  <div id="modal" hidden>
+    <div class="modal-box">
+      <header class="modal-head">
+        <span id="modalTitle"></span>
+        <button id="modalClose" title="关闭">×</button>
+      </header>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+
+  <input type="file" id="fileInput" multiple accept=".html,.htm,.json" hidden>
+</div>
+
+<script type="module" src="js/assetlib.js"></script>
+<script type="module" src="js/scenes.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
